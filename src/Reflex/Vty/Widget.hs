@@ -53,6 +53,7 @@ module Reflex.Vty.Widget
   , text
   , scrollableText
   , display
+  , BoxAttributes(..)
   , BoxStyle(..)
   , hyphenBoxStyle
   , singleBoxStyle
@@ -255,9 +256,9 @@ regionSize :: Region -> (Int, Int)
 regionSize (Region _ _ w h) = (w, h)
 
 -- | Produces an 'Image' that fills a region with space characters
-regionBlankImage :: Region -> Image
-regionBlankImage r@(Region _ _ width height) =
-  withinImage r $ V.charFill V.defAttr ' ' width height
+regionBlankImage :: V.Color -> Region -> Image
+regionBlankImage color r@(Region _ _ width height) =
+  withinImage r $ V.charFill (V.defAttr `V.withBackColor` color) ' ' width height
 
 -- | A behavior of the current display area represented by a 'DynRegion'
 currentRegion :: Reflex t => DynRegion t -> Behavior t Region
@@ -558,6 +559,15 @@ fill c = do
 hRule :: (Reflex t, Monad m) => BoxStyle -> VtyWidget t m ()
 hRule boxStyle = fill (_boxStyle_s boxStyle)
 
+data BoxAttributes = BoxAttributes
+  { _boxAttributesFillColor  :: V.Color
+  , _boxAttributesBorderAttr :: V.Attr
+  , _boxAttributesBoxStyle   :: BoxStyle
+  }
+
+instance Default BoxAttributes where
+  def = BoxAttributes V.black V.defAttr def
+
 -- | Defines a set of symbols to use to draw the outlines of boxes
 -- C.f. https://en.wikipedia.org/wiki/Box-drawing_character
 data BoxStyle = BoxStyle
@@ -597,43 +607,46 @@ roundedBoxStyle = BoxStyle '╭' '─' '╮' '│' '╯' '─' '╰' '│'
 
 -- | Draws a titled box in the provided style and a child widget inside of that box
 boxTitle :: (Monad m, Reflex t, MonadNodeId m)
-    => Behavior t BoxStyle
+    => Behavior t BoxAttributes
     -> Text
     -> VtyWidget t m a
     -> VtyWidget t m a
-boxTitle boxStyle title child = do
+boxTitle boxAttr title child = do
   dh <- displayHeight
   dw <- displayWidth
   let boxReg = DynRegion (pure 0) (pure 0) dw dh
       innerReg = DynRegion (pure 1) (pure 1) (subtract 2 <$> dw) (subtract 2 <$> dh)
-  tellImages (boxImages <$> boxStyle <*> currentRegion boxReg)
-  tellImages (fmap (\r -> [regionBlankImage r]) (currentRegion innerReg))
+  tellImages (boxImages <$> boxAttr <*> currentRegion boxReg)
+  tellImages ((\color r -> [regionBlankImage color r]) <$> fmap _boxAttributesFillColor boxAttr <*> currentRegion innerReg)
   pane innerReg (pure True) child
   where
-    boxImages :: BoxStyle -> Region -> [Image]
-    boxImages style (Region left top width height) =
-      let right = left + width - 1
+
+    boxImages :: BoxAttributes -> Region -> [Image]
+    boxImages theAttrs (Region left top width height) =
+      let style = _boxAttributesBoxStyle theAttrs
+          borderAttr = _boxAttributesBorderAttr theAttrs
+          right = left + width - 1
           bottom = top + height - 1
           sides =
             [ withinImage (Region (left + 1) top (width - 2) 1) $
-                V.text' V.defAttr $
+                V.text' borderAttr $
                   hPadText title (_boxStyle_n style) (width - 2)
             , withinImage (Region right (top + 1) 1 (height - 2)) $
-                V.charFill V.defAttr (_boxStyle_e style) 1 (height - 2)
+                V.charFill borderAttr (_boxStyle_e style) 1 (height - 2)
             , withinImage (Region (left + 1) bottom (width - 2) 1) $
-                V.charFill V.defAttr (_boxStyle_s style) (width - 2) 1
+                V.charFill borderAttr (_boxStyle_s style) (width - 2) 1
             , withinImage (Region left (top + 1) 1 (height - 2)) $
-                V.charFill V.defAttr (_boxStyle_w style) 1 (height - 2)
+                V.charFill borderAttr (_boxStyle_w style) 1 (height - 2)
             ]
           corners =
             [ withinImage (Region left top 1 1) $
-                V.char V.defAttr (_boxStyle_nw style)
+                V.char borderAttr (_boxStyle_nw style)
             , withinImage (Region right top 1 1) $
-                V.char V.defAttr (_boxStyle_ne style)
+                V.char borderAttr (_boxStyle_ne style)
             , withinImage (Region right bottom 1 1) $
-                V.char V.defAttr (_boxStyle_se style)
+                V.char borderAttr (_boxStyle_se style)
             , withinImage (Region left bottom 1 1) $
-                V.char V.defAttr (_boxStyle_sw style)
+                V.char borderAttr (_boxStyle_sw style)
             ]
       in sides ++ if width > 1 && height > 1 then corners else []
     hPadText :: T.Text -> Char -> Int -> T.Text
@@ -649,7 +662,7 @@ boxTitle boxStyle title child = do
 
 -- | A box without a title
 box :: (Monad m, Reflex t, MonadNodeId m)
-    => Behavior t BoxStyle
+    => Behavior t BoxAttributes
     -> VtyWidget t m a
     -> VtyWidget t m a
 box boxStyle = boxTitle boxStyle mempty
@@ -657,7 +670,7 @@ box boxStyle = boxTitle boxStyle mempty
 -- | A box whose style is static
 boxStatic
   :: (Reflex t, Monad m, MonadNodeId m)
-  => BoxStyle
+  => BoxAttributes
   -> VtyWidget t m a
   -> VtyWidget t m a
 boxStatic = box . pure

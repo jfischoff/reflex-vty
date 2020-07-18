@@ -23,26 +23,37 @@ import Reflex.Vty.Widget
 
 -- | Configuration options for the 'button' widget
 data ButtonConfig t = ButtonConfig
-  { _buttonConfig_boxStyle :: Behavior t BoxStyle
-  , _buttonConfig_focusStyle :: Behavior t BoxStyle
+  { _buttonConfig_boxStyle :: Behavior t BoxAttributes
+  , _buttonConfig_focusStyle :: Behavior t BoxAttributes
+  , _buttonConfig_disabledStyle :: Behavior t BoxAttributes
   }
 
 instance Reflex t => Default (ButtonConfig t) where
-  def = ButtonConfig (pure singleBoxStyle) (pure thickBoxStyle)
+  def = ButtonConfig
+    (pure $ def { _boxAttributesBoxStyle = singleBoxStyle } )
+    (pure $ def { _boxAttributesBoxStyle = thickBoxStyle } )
+    (pure $ def { _boxAttributesBorderAttr = V.defAttr `V.withForeColor` V.Color240 232
+                , _boxAttributesBoxStyle = singleBoxStyle
+                } )
 
 -- | A button widget that contains a sub-widget
 button
   :: (Reflex t, Monad m, MonadNodeId m)
   => ButtonConfig t
+  -> Dynamic t Bool
   -> VtyWidget t m ()
   -> VtyWidget t m (Event t ())
-button cfg child = do
+button cfg enabled child = do
   f <- focus
   let style = do
+        isEnabled <- current enabled
         isFocused <- current f
-        if isFocused
-          then _buttonConfig_focusStyle cfg
-          else _buttonConfig_boxStyle cfg
+        if isFocused then
+          _buttonConfig_focusStyle cfg
+        else if isEnabled then
+          _buttonConfig_boxStyle cfg
+        else
+          _buttonConfig_disabledStyle cfg
   box style child
   m <- mouseUp
   k <- key V.KEnter
@@ -52,17 +63,27 @@ button cfg child = do
 textButton
   :: (Reflex t, Monad m, MonadNodeId m)
   => ButtonConfig t
+  -> Dynamic t Bool
   -> Behavior t Text
   -> VtyWidget t m (Event t ())
-textButton cfg = button cfg . text -- TODO Centering etc.
+textButton cfg enabled = do
+  let theStyle = do
+        isEnabled <- current enabled
+        if isEnabled then
+          pure V.defAttr
+        else
+          _boxAttributesBorderAttr <$> _buttonConfig_disabledStyle cfg
+
+  button cfg enabled . richText (RichTextConfig theStyle)
 
 -- | A button widget that displays a static bit of text
 textButtonStatic
   :: (Reflex t, Monad m, MonadNodeId m)
   => ButtonConfig t
+  -> Dynamic t Bool
   -> Text
   -> VtyWidget t m (Event t ())
-textButtonStatic cfg = textButton cfg . pure
+textButtonStatic cfg enabled = textButton cfg enabled . pure
 
 -- | A clickable link widget
 link

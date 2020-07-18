@@ -17,6 +17,7 @@ module Reflex.Vty.Widget.Layout
   , TileConfig(..)
   , tile
   , fixed
+  , fixedWithEnabled
   , stretch
   , col
   , row
@@ -201,6 +202,22 @@ fixed
   -> Layout t m a
 fixed sz = tile (def { _tileConfig_constraint =  Constraint_Fixed <$> sz }) . clickable
 
+-- | A 'tile' of a fixed size that is focusable and gains focus on click if it is enabled
+fixedWithEnabled
+  :: (Reflex t, Monad m, MonadNodeId m)
+  => Dynamic t Int
+  -> Dynamic t Bool
+  -> VtyWidget t m a
+  -> Layout t m a
+fixedWithEnabled sz enabled
+  = tile
+    ( TileConfig
+      { _tileConfig_constraint = Constraint_Fixed <$> sz
+      , _tileConfig_focusable  = enabled
+      }
+    )
+  . clickable
+
 -- | A 'tile' that can stretch (i.e., has no fixed size) and has a minimum size of 0.
 -- This tile is focusable and gains focus on click.
 stretch
@@ -281,5 +298,3 @@ computeSizes available constraints =
 computeEdges :: (Ord k) => Map k (a, Int) -> Map k (a, (Int, Int))
 computeEdges = fst . Map.foldlWithKey' (\(m, offset) k (a, sz) ->
   (Map.insert k (a, (offset, sz)) m, sz + offset)) (Map.empty, 0)
-
-

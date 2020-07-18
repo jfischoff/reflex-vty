@@ -15,7 +15,6 @@ import Control.Monad.Fix
 import Control.Monad.NodeId
 import Data.Functor.Misc
 import Data.Map (Map)
-import Data.Maybe
 import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -39,9 +38,9 @@ main = mainWidget $ do
           fixed 1 $ text "Select an example."
           fixed 1 $ text "Esc will bring you back here."
           fixed 1 $ text "Ctrl+c to quit."
-        a <- fixed 5 $ textButtonStatic def "Todo List"
-        b <- fixed 5 $ textButtonStatic def "Text Editor"
-        c <- fixed 5 $ textButtonStatic def "Scrollable text display"
+        a <- fixed 5 $ textButtonStatic def (pure True) "Todo List"
+        b <- fixed 5 $ textButtonStatic def (pure True) "Text Editor"
+        c <- fixed 5 $ textButtonStatic def (pure True) "Scrollable text display"
         return $ leftmost
           [ Left Example_Todo <$ a
           , Left Example_TextEditor <$ b
@@ -61,12 +60,12 @@ main = mainWidget $ do
   return $ fforMaybe inp $ \case
     V.EvKey (V.KChar 'c') [V.MCtrl] -> Just ()
     _ -> Nothing
- 
+
 taskList
   :: (Reflex t, MonadHold t m, MonadFix m, Adjustable t m, NotReady t m, PostBuild t m, MonadNodeId m)
   => VtyWidget t m ()
 taskList = do
-  let btn = textButtonStatic def "Add another task"
+  let btn = textButtonStatic def (pure True) "Add another task"
   inp <- input
   let todos0 =
         [ Todo "Find reflex-vty" True
@@ -91,15 +90,15 @@ testBoxes = do
   dh <- displayHeight
   let region1 = DynRegion (div' dw 6) (div' dh 6) (div' dw 2) (div' dh 2)
       region2 = DynRegion (div' dw 4) (div' dh 4) (2 * div' dw 3) (2 * div' dh 3)
-  pane region1 (constDyn False) . boxStatic singleBoxStyle $ debugInput
-  _ <- pane region2 (constDyn True) . boxStatic singleBoxStyle $
+  pane region1 (constDyn False) . boxStatic def $ debugInput
+  _ <- pane region2 (constDyn True) . boxStatic def $
     let cfg = def
           { _textInputConfig_initialValue =
             "This box is a text input. The box below responds to mouse drag inputs. You can also drag the separator between the boxes to resize them."
           }
-        textBox = boxTitle (pure roundedBoxStyle) "Text Edit" $
+        textBox = boxTitle (pure $ def { _boxAttributesBoxStyle = roundedBoxStyle } ) "Text Edit" $
           multilineTextInput cfg
-        dragBox = boxStatic roundedBoxStyle dragTest
+        dragBox = boxStatic ( def { _boxAttributesBoxStyle = roundedBoxStyle }) dragTest
     in splitVDrag (hRule doubleBoxStyle) textBox dragBox
   return ()
   where
@@ -122,7 +121,7 @@ dragTest = do
   text $ T.pack <$> lastEvent
 
 testStringBox :: (Reflex t, Monad m, MonadNodeId m) => VtyWidget t m ()
-testStringBox = boxStatic singleBoxStyle .
+testStringBox = boxStatic (def { _boxAttributesBoxStyle = singleBoxStyle }) .
   text . pure . T.pack . take 500 $ cycle ('\n' : ['a'..'z'])
 
 data Todo = Todo
@@ -153,7 +152,7 @@ todo t0 = do
           checkboxRegion = DynRegion 0 0 checkboxWidth 1
           labelHeight = _textInput_lines ti
           labelWidth = w - 1 - checkboxWidth
-          labelLeft = checkboxWidth + 1 
+          labelLeft = checkboxWidth + 1
           labelTop = constDyn 0
           labelRegion = DynRegion labelLeft labelTop labelWidth labelHeight
       value <- pane checkboxRegion (pure True) $ checkbox def $ _todo_done t0
